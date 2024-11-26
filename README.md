@@ -223,6 +223,10 @@ We have set this example by keeping in mind that you know the basics of discord.
 -   Github: [@UnschooledGamer](https://github.com/UnschooledGamer)
 -   Discord: @unschooledgamer
 
+⬛ ToddyTheNoobDud
+-   Github: [@Toddyn](https://github.com/ToddyTheNoobDud)
+-   Discord: @mushroom0162
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE)
