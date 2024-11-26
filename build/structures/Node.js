@@ -4,12 +4,12 @@ const { Track } = require("./Track");
 
 class Node {
     /**
-     * @param {import("./Riffy").Riffy} riffy 
+     * @param {import("./toddysriffy").toddysriffy} toddysriffy 
      * @param {} node 
      * @param {Object} options
      */
-    constructor(riffy, node, options) {
-        this.riffy = riffy;
+    constructor(toddysriffy, node, options) {
+        this.toddysriffy = toddysriffy;
         this.name = node.name || node.host;
         this.host = node.host || "localhost";
         this.port = node.port || 2333;
@@ -17,7 +17,7 @@ class Node {
         this.restVersion = options.restVersion;
         this.secure = node.secure || false;
         this.sessionId = node.sessionId || null;
-        this.rest = new Rest(riffy, this);
+        this.rest = new Rest(toddysriffy, this);
         this.wsUrl = `ws${this.secure ? "s" : ""}://${this.host}:${this.port}${options.restVersion === "v4" ? "/v4/websocket" : ""}`;
         this.restUrl = `http${this.secure ? "s" : ""}://${this.host}:${this.port}`;
         this.ws = null;
@@ -63,7 +63,6 @@ class Node {
             if (!this.sessionId) throw new Error(`Node (${this.name}) is not Ready/Connected.`);
             if (!plugins.length) plugins = ["lavalyrics-plugin", "java-lyrics-plugin", "lyrics"];
             const missingPlugins = plugins.filter(plugin => !this.info.plugins.some(p => p.name === plugin));
-
             if (eitherOne && missingPlugins.length === plugins.length) {
                 throw new RangeError(`Node (${this.name}) is missing plugins: ${missingPlugins.join(", ")} (required for Lyrics)`);
             } else if (!eitherOne && missingPlugins.length) {
@@ -71,7 +70,6 @@ class Node {
             }
             return true;
         },
-
         get: async (trackOrEncodedTrackStr, skipTrackSource = false) => {
             if (!(await this.lyrics.checkAvailable(false, "lavalyrics-plugin"))) return null;
             if (!(trackOrEncodedTrackStr instanceof Track) && typeof trackOrEncodedTrackStr !== "string") {
@@ -80,11 +78,9 @@ class Node {
             const encodedTrackStr = typeof trackOrEncodedTrackStr === "string" ? trackOrEncodedTrackStr : trackOrEncodedTrackStr.track;
             return await this.rest.makeRequest("GET", `/v4/lyrics?skipTrackSource=${skipTrackSource}&track=${encodedTrackStr}`);
         },
-
         getCurrentTrack: async (guildId, skipTrackSource = false, plugin) => {
             const DEFAULT_PLUGIN = "lavalyrics-plugin";
             if (!(await this.lyrics.checkAvailable())) return null;
-
             let requestURL = `/v4/sessions/${this.sessionId}/players/${guildId}/track/lyrics?skipTrackSource=${skipTrackSource}&plugin=${plugin || DEFAULT_PLUGIN}`;
             if (!plugin && (this.info.plugins.some(p => p.name === "java-lyrics-plugin") || this.info.plugins.some(p => p.name === "lyrics")) && !this.info.plugins.some(p => p.name === DEFAULT_PLUGIN)) {
                 requestURL = requestURL.replace('track/lyrics', 'lyrics');
@@ -99,19 +95,17 @@ class Node {
 
     async connect() {
         if (this.ws) this.ws.close();
-        this.riffy.emit('debug', this.name, `Checking Node Version`);
-
+        this.toddysriffy.emit('debug', this.name, `Checking Node Version`);
         const headers = {
             "Authorization": this.password,
-            "User-Id": this.riffy.clientId,
-            "Client-Name": `Riffy/${this.riffy.version}`,
+            "User-Id": this.toddysriffy.clientId,
+            "Client-Name": `toddysriffy/${this.toddysriffy.version}`,
         };
         if (this.restVersion === "v4" && this.sessionId) {
             headers["Session-Id"] = this.sessionId;
         } else if (this.resumeKey) {
             headers["Resume-Key"] = this.resumeKey;
         }
-
         this.ws = new Websocket(this.wsUrl, { headers });
         this.ws.on("open", this.open.bind(this));
         this.ws.on("error", this.error.bind(this));
@@ -122,18 +116,16 @@ class Node {
     async open() {
         if (this.reconnectAttempt) clearTimeout(this.reconnectAttempt);
         this.connected = true;
-        this.riffy.emit('debug', this.name, `Connection with Lavalink established on ${this.wsUrl}`);
+        this.toddysriffy.emit('debug', this.name, `Connection with Lavalink established on ${this.wsUrl}`);
         this.info = await this.fetchInfo().catch(e => {
             console.error(`Node (${this.name}) Failed to fetch info (${this.restVersion}/info) on WS-OPEN: ${e}`);
             return null;
         });
-
         if (!this.info && !this.options.bypassChecks.nodeFetchInfo) {
             throw new Error(`Node (${this.name} - URL: ${this.restUrl}) Failed to fetch info on WS-OPEN`);
         }
-
         if (this.autoResume) {
-            for (const player of this.riffy.players.values()) {
+            for (const player of this.toddysriffy.players.values()) {
                 if (player.node === this) {
                     player.restart();
                 }
@@ -143,7 +135,7 @@ class Node {
 
     error(event) {
         if (!event) return;
-        this.riffy.emit("nodeError", this, event);
+        this.toddysriffy.emit("nodeError", this, event);
     }
 
     message(msg) {
@@ -151,37 +143,32 @@ class Node {
         else if (msg instanceof ArrayBuffer) msg = Buffer.from(msg);
         const payload = JSON.parse(msg.toString());
         if (!payload.op) return;
-
-        this.riffy.emit("raw", "Node", payload);
-        this.riffy.emit("debug", this.name, `Lavalink Node Update: ${JSON.stringify(payload)}`);
-
+        this.toddysriffy.emit("raw", "Node", payload);
+        this.toddysriffy.emit("debug", this.name, `Lavalink Node Update: ${JSON.stringify(payload)}`);
         if (payload.op === "stats") {
             this.stats = { ...payload };
             this.lastStats = Date.now();
         }
-
         if (payload.op === "ready") {
             if (this.sessionId !== payload.sessionId) {
                 this.rest.setSessionId(payload.sessionId);
                 this.sessionId = payload.sessionId;
             }
-            this.riffy.emit("nodeConnect", this);
-            this.riffy.emit("debug", this.name, `Ready Payload received ${JSON.stringify(payload)}`);
-
+            this.toddysriffy.emit("nodeConnect", this);
+            this.toddysriffy.emit("debug", this.name, `Ready Payload received ${JSON.stringify(payload)}`);
             const resumeData = this.restVersion === "v4" ? { resuming: true, timeout: this.resumeTimeout } : { resumingKey: this.resumeKey, timeout: this.resumeTimeout };
             if (this.sessionId) {
                 this.rest.makeRequest(`PATCH`, `/${this.rest.version}/sessions/${this.sessionId}`, resumeData);
-                this.riffy.emit("debug", this.name, `Resuming configured on Lavalink`);
+                this.toddysriffy.emit("debug", this.name, `Resuming configured on Lavalink`);
             }
         }
-
-        const player = this.riffy.players.get(payload.guildId);
+        const player = this.toddysriffy.players.get(payload.guildId);
         if (payload.guildId && player) player.emit(payload.op, payload);
     }
 
     close(event, reason) {
-        this.riffy.emit("nodeDisconnect", this, { event, reason });
-        this.riffy.emit("debug", `Connection with Lavalink closed with Error code: ${event || "Unknown code"}, reason: ${reason || "Unknown reason"}`);
+        this.toddysriffy.emit("nodeDisconnect", this, { event, reason });
+        this.toddysriffy.emit("debug", `Connection with Lavalink closed with Error code: ${event || "Unknown code"}, reason: ${reason || "Unknown reason"}`);
         this.connected = false;
         this.reconnect();
     }
@@ -190,12 +177,12 @@ class Node {
         this.reconnectAttempt = setTimeout(() => {
             if (this.reconnectAttempted >= this.reconnectTries) {
                 const error = new Error(`Unable to connect with ${this.name} node after ${this.reconnectTries} attempts.`);
-                this.riffy.emit("nodeError", this, error);
+                this.toddysriffy.emit("nodeError", this, error);
                 return this.destroy();
             }
             this.ws?.removeAllListeners();
             this.ws = null;
-            this.riffy.emit("nodeReconnect", this);
+            this.toddysriffy.emit("nodeReconnect", this);
             this.connect();
             this.reconnectAttempted++;
         }, this.reconnectTimeout);
@@ -207,7 +194,7 @@ class Node {
             return;
         }
         if (!this.connected) return;
-        this.riffy.players.forEach(player => {
+        this.toddysriffy.players.forEach(player => {
             if (player.node !== this) return;
             player.destroy();
         });
@@ -219,14 +206,14 @@ class Node {
         this.ws?.removeAllListeners();
         this.ws = null;
         clearTimeout(this.reconnectAttempt);
-        this.riffy.emit("nodeDestroy", this);
-        this.riffy.nodes.delete(this.name);
+        this.toddysriffy.emit("nodeDestroy", this);
+        this.toddysriffy.nodes.delete(this.name);
         this.connected = false;
     }
 
     disconnect() {
         if (!this.connected) return;
-        this.riffy.players.forEach(player => {
+        this.toddysriffy.players.forEach(player => {
             if (player.node === this) {
                 player.move();
             }
@@ -237,7 +224,6 @@ class Node {
 
     get penalties() {
         if (!this.connected) return 0;
-
         let penalties = this.stats.players || 0;
         if (this.stats.cpu && this.stats.cpu.systemLoad) {
             penalties += Math.round(Math.pow(1.05, 100 * this.stats.cpu.systemLoad) * 10 - 10);
