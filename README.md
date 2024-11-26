@@ -35,13 +35,13 @@ First things first, you need to have a Lavalink node running. You can download t
 
 We are using [discord.js](https://discord.js.org/) for this example, but you can use any Discord library you prefer.
 
-Import the `Riffy` class from the `riffy` package.
+Import the `ToddysRiffy` class from the `riffy` package.
 
 ```js
 // For CommonJS
-const { Riffy } = require("riffy");
+const { ToddysRiffy } = require("riffy");
 // For ES6
-import { Riffy } from "riffy";
+import { ToddysRiffy } from "riffy";
 ```
 
 Below is an example of a basic Discord music bot using Discord.js and Riffy. (Lavalink V4)
@@ -50,7 +50,7 @@ Below is an example of a basic Discord music bot using Discord.js and Riffy. (La
 // index.js
 
 const { Client, GatewayDispatchEvents } = require("discord.js");
-const { Riffy } = require("riffy");
+const { ToddysRiffy } = require("riffy");
 
 const client = new Client({
     intents: [
@@ -72,7 +72,7 @@ const nodes = [
     },
 ];
 
-client.riffy = new Riffy(client, nodes, {
+client.riffy = new ToddysRiffy(client, nodes, {
     send: (payload) => {
         const guild = client.guilds.cache.get(payload.d.guild_id);
         if (guild) guild.shard.send(payload);
