@@ -19,66 +19,72 @@ class Track {
             isrc: data.info?.isrc || null,
             _cachedThumbnail: data.info.thumbnail ?? null,
             get thumbnail() {
-            if (data.info.thumbnail) return data.info.thumbnail;
-
-            if (node.rest.version === "v4") {
-                if (data.info.artworkUrl) {
-                  this._cachedThumbnail = data.info.artworkUrl;
-                  return data.info.artworkUrl
-               } else {
-                  return !this._cachedThumbnail ? (this._cachedThumbnail = getImageUrl(this)) : this._cachedThumbnail ?? null
-               }
-              } else {
-              return !this._cachedThumbnail
-                ? (this._cachedThumbnail = getImageUrl(this))
-                : this._cachedThumbnail ?? null;
-              }
+                if (this._cachedThumbnail) return this._cachedThumbnail;
+                if (data.info.thumbnail) return data.info.thumbnail;
+                this._cachedThumbnail = node.rest.version === "v4" 
+                    ? data.info.artworkUrl || getImageUrl(this) 
+                    : getImageUrl(this);
+                return this._cachedThumbnail;
             }
         };
     }
 
     async resolve(riffy) {
-        const query = [this.info.author, this.info.title].filter((x) => !!x).join(" - ");
-        const result = await riffy.resolve({ query, source: riffy.options.defaultSearchPlatform, requester: this.info.requester });
+        const { author, title, length } = this.info;
+        const query = [author, title].filter(Boolean).join(" - ");
+        
+        // Attempt to resolve the track
+        try {
+            const result = await riffy.resolve({ query, source: riffy.options.defaultSearchPlatform, requester: this.info.requester });
+            if (!result || !result.tracks.length) return;
 
-        if (!result || !result.tracks.length) {
-            return;
-        }
+            const officialAudio = this.findOfficialAudio(result.tracks, author, title);
+            if (officialAudio) {
+                this.updateTrack(officialAudio);
+                return this;
+            }
 
-        const officialAudio = result.tracks.find((track) => {
-            const author = [this.info.author, `${this.info.author} - Topic`];
-            return author.some((name) => new RegExp(`^${escapeRegExp(name)}$`, "i").test(track.info.author)) ||
-                new RegExp(`^${escapeRegExp(this.info.title)}$`, "i").test(track.info.title);
-        });
+            if (length) {
+                const sameDurationTrack = this.findSimilarDurationTrack(result.tracks, length);
+                if (sameDurationTrack) {
+                    this.updateTrack(sameDurationTrack);
+                    return this;
+                }
+            }
 
-        if (officialAudio) {
-            this.info.identifier = officialAudio.info.identifier;
-            this.track = officialAudio.track;
+            // Fallback to the first track if no match is found
+            this.updateTrack(result.tracks[0]);
             return this;
+
+        } catch (error) {
+            console.error("Error resolving track:", error);
+            return null; // or handle the error as needed
         }
+    }
 
-        if (this.info.length) {
-            const sameDuration = result.tracks.find((track) => track.info.length >= (this.info.length ? this.info.length : 0) - 2000 &&
-                track.info.length <= (this.info.length ? this.info.length : 0) + 2000);
+    findOfficialAudio(tracks, author, title) {
+        const authorRegexes = [
+            new RegExp(`^${escapeRegExp(author)}$`, "i"),
+            new RegExp(`^${escapeRegExp(`${author} - Topic`)}$`, "i")
+        ];
+        const titleRegex = new RegExp(`^${escapeRegExp(title)}$`, "i");
 
-            if (sameDuration) {
-                this.info.identifier = sameDuration.info.identifier;
-                this.track = sameDuration.track;
-                return this;
-            }
+        return tracks.find(track => 
+            authorRegexes.some(regex => regex.test(track.info.author)) ||
+            titleRegex.test(track.info.title)
+        );
+    }
 
-            const sameDurationAndTitle = result.tracks.find((track) => track.info.title === this.info.title && track.info.length >= (this.info.length ? this.info.length : 0) - 2000 && track.info.length <= (this.info.length ? this.info.length : 0) + 2000);
+    findSimilarDurationTrack(tracks, length) {
+        const lengthRange = [length - 2000, length + 2000];
+        return tracks.find(track => 
+            track.info.length >= lengthRange[0] && track.info.length <= lengthRange[1]
+        );
+    }
 
-            if (sameDurationAndTitle) {
-                this.info.identifier = sameDurationAndTitle.info.identifier;
-                this.track = sameDurationAndTitle.track;
-                return this;
-            }
-        }
-
-        this.info.identifier = result.tracks[0].info.identifier;
-        this.track = result.tracks[0].track;
-        return this;
+    updateTrack(track) {
+        this.info.identifier = track.info.identifier;
+        this.track = track.track;
     }
 }
 
