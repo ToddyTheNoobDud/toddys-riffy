@@ -18,24 +18,32 @@ class Track {
             sourceName: data.info.sourceName,
             isrc: data.info?.isrc || null,
             _cachedThumbnail: data.info.thumbnail ?? null,
-            get thumbnail() {
-                if (this._cachedThumbnail) return this._cachedThumbnail;
-                if (data.info.thumbnail) return data.info.thumbnail;
-                this._cachedThumbnail = node.rest.version === "v4" 
-                    ? data.info.artworkUrl || getImageUrl(this) 
-                    : getImageUrl(this);
-                return this._cachedThumbnail;
-            }
         };
+        this.node = node; // Store node reference to avoid passing it around
     }
 
-    async resolve(riffy) {
+    get thumbnail() {
+        // Return cached thumbnail if available
+        if (this.info._cachedThumbnail) return this.info._cachedThumbnail;
+
+        // Check if thumbnail is available in the data
+        const { thumbnail, artworkUrl } = this.rawData.info;
+        if (thumbnail) return thumbnail;
+
+        // Generate thumbnail URL based on node version
+        this.info._cachedThumbnail = this.node.rest.version === "v4" 
+            ? artworkUrl || getImageUrl(this) 
+            : getImageUrl(this);
+        
+        return this.info._cachedThumbnail;
+    }
+
+    async resolve(toddysriffy) {
         const { author, title, length } = this.info;
         const query = [author, title].filter(Boolean).join(" - ");
-        
         // Attempt to resolve the track
         try {
-            const result = await riffy.resolve({ query, source: riffy.options.defaultSearchPlatform, requester: this.info.requester });
+            const result = await toddysriffy.resolve({ query, source: toddysriffy.options.defaultSearchPlatform, requester: this.info.requester });
             if (!result || !result.tracks.length) return;
 
             const officialAudio = this.findOfficialAudio(result.tracks, author, title);
@@ -55,7 +63,6 @@ class Track {
             // Fallback to the first track if no match is found
             this.updateTrack(result.tracks[0]);
             return this;
-
         } catch (error) {
             console.error("Error resolving track:", error);
             return null; // or handle the error as needed
@@ -68,7 +75,6 @@ class Track {
             new RegExp(`^${escapeRegExp(`${author} - Topic`)}$`, "i")
         ];
         const titleRegex = new RegExp(`^${escapeRegExp(title)}$`, "i");
-
         return tracks.find(track => 
             authorRegexes.some(regex => regex.test(track.info.author)) ||
             titleRegex.test(track.info.title)
