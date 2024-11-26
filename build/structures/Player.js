@@ -5,9 +5,9 @@ const { Queue } = require("./Queue");
 const { spAutoPlay, scAutoPlay } = require('../functions/autoPlay');
 
 class Player extends EventEmitter {
-    constructor(riffy, node, options) {
+    constructor(toddysriffy, node, options) {
         super();
-        this.riffy = riffy;
+        this.toddysriffy = toddysriffy;
         this.node = node;
         this.guildId = options.guildId;
         this.textChannel = options.textChannel;
@@ -18,7 +18,6 @@ class Player extends EventEmitter {
         this.deaf = options.deaf ?? false;
         this.volume = options.defaultVolume ?? 100;
         this.loop = options.loop ?? "none";
-        this.data = new Map(); // Use Map for better performance
         this.queue = new Queue();
         this.position = 0;
         this.current = null;
@@ -36,7 +35,7 @@ class Player extends EventEmitter {
             this.position = state.position;
             this.ping = state.ping;
             this.timestamp = state.time;
-            this.riffy.emit("playerUpdate", this, packet);
+            this.toddysriffy.emit("playerUpdate", this, packet);
         });
 
         this.on("event", (data) => {
@@ -45,11 +44,11 @@ class Player extends EventEmitter {
     }
 
     get previous() {
-        return this.previousTracks[0];
+        return this.previousTracks[0] || null; // Return null if there are no previous tracks
     }
 
     addToPreviousTrack(track) {
-        const maxHistory = this.riffy.options.multipleTrackHistory ?? 1;
+        const maxHistory = this.toddysriffy.options.multipleTrackHistory ?? 1;
         if (this.previousTracks.length >= maxHistory) {
             this.previousTracks.pop(); // Keep only the last played track
         }
@@ -57,34 +56,31 @@ class Player extends EventEmitter {
     }
 
     async play() {
-        if (!this.connected) throw new Error("Player connection is not initiated. Kindly use Riffy.createConnection() and establish a connection.");
+        if (!this.connected) throw new Error("Player connection is not initiated. Kindly use toddysriffy.createConnection() and establish a connection.");
         if (!this.queue.length) return;
 
         this.current = this.queue.shift();
         if (!this.current.track) {
-            this.current = await this.current.resolve(this.riffy);
+            this.current = await this.current.resolve(this.toddysriffy);
         }
 
         this.playing = true;
         this.position = 0;
         const { track } = this.current;
-
         this.node.rest.updatePlayer({
             guildId: this.guildId,
             data: { track: { encoded: track } },
         });
-
         return this;
     }
 
     async autoplay(player) {
-        if (player === null || player === false) {
+        if (!player) {
             this.isAutoplay = false;
             return this;
         }
 
         this.isAutoplay = true;
-
         if (!player.previous) return this;
 
         const { sourceName, identifier, uri } = player.previous.info;
@@ -94,15 +90,15 @@ class Player extends EventEmitter {
             switch (sourceName) {
                 case "youtube":
                     data = `https://www.youtube.com/watch?v=${identifier}&list=RD${identifier}`;
-                    response = await this.riffy.resolve({ query: data, source: "ytmsearch", requester: player.previous.info.requester });
+                    response = await this.toddysriffy.resolve({ query: data, source: "ytmsearch", requester: player.previous.info.requester });
                     break;
                 case "soundcloud":
                     data = await scAutoPlay(uri);
-                    response = await this.riffy.resolve({ query: data, source: "scsearch", requester: player.previous.info.requester });
+                    response = await this.toddysriffy.resolve({ query: data, source: "scsearch", requester: player.previous.info.requester });
                     break;
                 case "spotify":
                     data = await spAutoPlay(identifier);
-                    response = await this.riffy.resolve({ query: `https://open.spotify.com/track/${data}`, requester: player.previous.info.requester });
+                    response = await this.toddysriffy.resolve({ query: `https://open.spotify.com/track/${data}`, requester: player.previous.info.requester });
                     break;
                 default:
                     return this.stop();
@@ -119,7 +115,6 @@ class Player extends EventEmitter {
             console.error(e);
             return this.stop();
         }
-
         return this;
     }
 
@@ -132,7 +127,7 @@ class Player extends EventEmitter {
             self_mute: mute,
         });
         this.connected = true;
-        this.riffy.emit("debug", this.guildId, `Player has informed the Discord Gateway to establish voice connectivity in ${voiceChannel} voice channel.`);
+        this.toddysriffy.emit("debug", this.guildId, `Player has informed the Discord Gateway to establish voice connectivity in ${voiceChannel} voice channel.`);
     }
 
     stop() {
@@ -220,17 +215,15 @@ class Player extends EventEmitter {
     destroy() {
         this.disconnect();
         this.node.rest.destroyPlayer(this.guildId);
-        this.riffy.emit("playerDisconnect", this);
-        this.riffy.emit("debug", this.guildId, "Destroyed the player");
-        this.riffy.players.delete(this.guildId);
+        this.toddysriffy.emit("playerDisconnect", this);
+        this.toddysriffy.emit("debug", this.guildId, "Destroyed the player");
+        this.toddysriffy.players.delete(this.guildId);
     }
 
     async handleEvent(payload) {
-        const player = this.riffy.players.get(payload.guildId);
+        const player = this.toddysriffy.players.get(payload.guildId);
         if (!player) return;
-
         const track = this.current;
-
         switch (payload.type) {
             case "TrackStartEvent":
                 this.trackStart(player, track, payload);
@@ -248,7 +241,7 @@ class Player extends EventEmitter {
                 this.socketClosed(player, payload);
                 break;
             default:
-                this.riffy.emit("nodeError", this, new Error(`Node encountered an unknown event: '${payload.type}'`));
+                this.toddysriffy.emit("nodeError", this, new Error(`Node encountered an unknown event: '${payload.type}'`));
                 break;
         }
     }
@@ -256,52 +249,48 @@ class Player extends EventEmitter {
     trackStart(player, track, payload) {
         this.playing = true;
         this.paused = false;
-        this.riffy.emit("trackStart", player, track, payload);
+        this.toddysriffy.emit("trackStart", player, track, payload);
     }
 
     trackEnd(player, track, payload) {
         this.addToPreviousTrack(track);
         const previousTrack = this.previous;
-
         if (payload.reason.toLowerCase() === "replaced") {
-            return this.riffy.emit("trackEnd", player, track, payload);
+            return this.toddysriffy.emit("trackEnd", player, track, payload);
         }
-
         if (["loadfailed", "cleanup"].includes(payload.reason.replace("_", "").toLowerCase())) {
             if (player.queue.length === 0) {
                 this.playing = false;
-                return this.riffy.emit("queueEnd", player);
+                return this.toddysriffy.emit("queueEnd", player);
             }
-            this.riffy.emit("trackEnd", player, track, payload);
+            this.toddysriffy.emit("trackEnd", player, track, payload);
             return player.play();
         }
-
         if (this.loop === "track") {
             player.queue.unshift(previousTrack);
-            this.riffy.emit("trackEnd", player, track, payload);
+            this.toddysriffy.emit("trackEnd", player, track, payload);
             return player.play();
         } else if (this.loop === "queue") {
             player.queue.push(previousTrack);
-            this.riffy.emit("trackEnd", player, track, payload);
+            this.toddysriffy.emit("trackEnd", player, track, payload);
             return player.play();
         }
-
         if (player.queue.length === 0) {
             this.playing = false;
-            return this.riffy.emit("queueEnd", player);
+            return this.toddysriffy.emit("queueEnd", player);
         } else {
-            this.riffy.emit("trackEnd", player, track, payload);
+            this.toddysriffy.emit("trackEnd", player, track, payload);
             return player.play();
         }
     }
 
     trackError(player, track, payload) {
-        this.riffy.emit("trackError", player, track, payload);
+        this.toddysriffy.emit("trackError", player, track, payload);
         this.stop();
     }
 
     trackStuck(player, track, payload) {
-        this.riffy.emit("trackStuck", player, track, payload);
+        this.toddysriffy.emit("trackStuck", player, track, payload);
         this.stop();
     }
 
@@ -314,13 +303,13 @@ class Player extends EventEmitter {
                 self_deaf: this.deaf,
             });
         }
-        this.riffy.emit("socketClosed", player, payload);
+        this.toddysriffy.emit("socketClosed", player, payload);
         this.pause(true);
-        this.riffy.emit("debug", this.guildId, "Player paused, channel deleted, or client was kicked");
+        this.toddysriffy.emit("debug", this.guildId, "Player paused, channel deleted, or client was kicked");
     }
 
     send(data) {
-        this.riffy.send({ op: 4, d: data });
+        this.toddysriffy.send({ op: 4, d: data });
     }
 
     set(key, value) {
