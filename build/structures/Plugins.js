@@ -3,8 +3,8 @@ class Plugin {
         this.name = name;
     }
 
-    load(riffy) { }
-    unload(riffy) { }
+    load(toddysriffy) { }
+    unload(toddysriffy) { }
 }
 
 module.exports = { Plugin };
