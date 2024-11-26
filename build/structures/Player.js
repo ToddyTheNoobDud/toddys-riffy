@@ -67,6 +67,7 @@ class Player extends EventEmitter {
         this.playing = true;
         this.position = 0;
         const { track } = this.current;
+
         this.node.rest.updatePlayer({
             guildId: this.guildId,
             data: { track: { encoded: track } },
@@ -174,13 +175,13 @@ class Player extends EventEmitter {
     }
 
     setTextChannel(channel) {
-        if (typeof channel !== "string") throw new TypeError("Channel must be a non-empty string.");
+        if (typeof channel !== "string" || channel.length === 0) throw new TypeError("Channel must be a non-empty string.");
         this.textChannel = channel;
         return this;
     }
 
     setVoiceChannel(channel, options) {
-        if (typeof channel !== "string") throw new TypeError("Channel must be a non-empty string.");
+        if (typeof channel !== "string" || channel.length === 0) throw new TypeError("Channel must be a non-empty string.");
         if (this.connected && channel === this.voiceChannel) {
             throw new ReferenceError(`Player is already connected to ${channel}`);
         }
@@ -224,6 +225,7 @@ class Player extends EventEmitter {
         const player = this.toddysriffy.players.get(payload.guildId);
         if (!player) return;
         const track = this.current;
+
         switch (payload.type) {
             case "TrackStartEvent":
                 this.trackStart(player, track, payload);
@@ -255,9 +257,11 @@ class Player extends EventEmitter {
     trackEnd(player, track, payload) {
         this.addToPreviousTrack(track);
         const previousTrack = this.previous;
+
         if (payload.reason.toLowerCase() === "replaced") {
             return this.toddysriffy.emit("trackEnd", player, track, payload);
         }
+
         if (["loadfailed", "cleanup"].includes(payload.reason.replace("_", "").toLowerCase())) {
             if (player.queue.length === 0) {
                 this.playing = false;
@@ -266,6 +270,7 @@ class Player extends EventEmitter {
             this.toddysriffy.emit("trackEnd", player, track, payload);
             return player.play();
         }
+
         if (this.loop === "track") {
             player.queue.unshift(previousTrack);
             this.toddysriffy.emit("trackEnd", player, track, payload);
@@ -275,6 +280,7 @@ class Player extends EventEmitter {
             this.toddysriffy.emit("trackEnd", player, track, payload);
             return player.play();
         }
+
         if (player.queue.length === 0) {
             this.playing = false;
             return this.toddysriffy.emit("queueEnd", player);
@@ -322,7 +328,7 @@ class Player extends EventEmitter {
 
     /**
      * @description clears all custom data set on the player
-     */ 
+     */
     clearData() {
         this.data.clear();
         return this;
