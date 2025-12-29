@@ -1,31 +1,29 @@
 const undici = require('undici');
-const { JSDOM } = require('jsdom');
-const crypto = require('crypto');
+
+const SC_LINK_RE = /<a\s+itemprop="url"\s+href="(\/[^"]+)"/g;
 
 async function scAutoPlay(url) {
+  try {
     const res = await undici.fetch(`${url}/recommended`);
 
-    if (res.status !== 200) {
-        throw new Error(`Failed to fetch URL. Status code: ${res.status}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch URL. Status code: ${res.status}`);
     }
 
     const html = await res.text();
 
-    const dom = new JSDOM(html);
-    const document = dom.window.document;
+    const links = [];
+    for (const match of html.matchAll(SC_LINK_RE)) {
+      if (match[1]) {
+        links.push(`https://soundcloud.com${match[1]}`);
+      }
+    }
 
-    const secondNoscript = document.querySelectorAll('noscript')[1];
-    const sectionElement = secondNoscript.querySelector('section');
-    const articleElements = sectionElement.querySelectorAll('article');
-
-    articleElements.forEach(articleElement => {
-        const h2Element = articleElement.querySelector('h2[itemprop="name"]');
-
-        const aElement = h2Element.querySelector('a[itemprop="url"]');
-        const href = `https://soundcloud.com${aElement.getAttribute('href')}`
-
-        return href;
-    });
+    return links;
+  } catch (error) {
+    console.error('scAutoPlay error:', error?.message || error);
+    return [];
+  }
 }
 
 async function spAutoPlay(track_id) {
