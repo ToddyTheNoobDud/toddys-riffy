@@ -197,32 +197,44 @@ class Player extends EventEmitter {
                 }
             } else if (player.previous.info.sourceName === "soundcloud") {
                 try {
-                    scAutoPlay(player.previous.info.uri).then(async (data) => {
-                        let response = await this.riffy.resolve({ query: data, source: "scsearch", requester: player.previous.info.requester });
+                    const links = await scAutoPlay(player.previous.info.uri);
 
-                        if (this.node.rest.version === "v4") {
-                            if (!response || !response.tracks || ["error", "empty"].includes(response.loadType)) return this.stop();
-                        } else {
-                            if (!response || !response.tracks || ["LOAD_FAILED", "NO_MATCHES"].includes(response.loadType)) return this.stop();
-                        }
+                    if (!links || links.length === 0) {
+                        return this.stop();
+                    }
 
-                        // Filter tracks that have never been played
-                        let availableTracks = response.tracks.filter(track => {
-                            const trackId = track.info.identifier || track.info.uri;
-                            return !this.playedIdentifiers.has(trackId);
-                        });
+                    const randomLink = links[Math.floor(Math.random() * links.length)];
 
-                        // If all tracks have been played, reset and use all tracks. If all tracks have been played, reset and use all tracks.
-                        if (availableTracks.length === 0) {
-                            availableTracks = response.tracks;
-                        }
+                    let response = await this.riffy.resolve({
+                        query: randomLink,
+                        source: "scsearch",
+                        requester: player.previous.info.requester
+                    });
 
-                        let track = availableTracks[Math.floor(Math.random() * availableTracks.length)];
+                    if (this.node.rest.version === "v4") {
+                        if (!response || !response.tracks || ["error", "empty"].includes(response.loadType)) return this.stop();
+                    } else {
+                        if (!response || !response.tracks || ["LOAD_FAILED", "NO_MATCHES"].includes(response.loadType)) return this.stop();
+                    }
 
-                        this.queue.push(track);
-                        this.play();
-                        return this;
-                    })
+                    let availableTracks = response.tracks.filter(track => {
+                        const trackId = track.info.identifier || track.info.uri;
+                        return !this.playedIdentifiers.has(trackId);
+                    });
+
+                    if (availableTracks.length === 0) {
+                        availableTracks = response.tracks;
+                    }
+
+                    if (availableTracks.length === 0) {
+                        return this.stop();
+                    }
+
+                    let track = availableTracks[Math.floor(Math.random() * availableTracks.length)];
+
+                    this.queue.push(track);
+                    this.play();
+                    return this;
                 } catch (e) {
                     console.log(e);
                     return this.stop();
